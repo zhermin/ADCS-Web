@@ -27,7 +27,7 @@ def model_load(model_name):
     loaded_model.summary()
     return loaded_model
 
-@st.cache
+# @st.cache
 def load_images(image_files):
     imgs = []
     for i in range(len(image_files)):
@@ -41,9 +41,9 @@ def load_images(image_files):
     return imgs
 
 @st.cache(show_spinner=False)
-def predict(imgs):
+def predict(image_files):
     with tf.device('/cpu:0'):
-        pred = model.predict(imgs, batch_size=BATCH_SIZE)
+        pred = model.predict(load_images(image_files), batch_size=BATCH_SIZE)
     return pred
 
 @st.cache
@@ -70,7 +70,7 @@ Latest Results: Model "vgg16_13Oct-1845.h5" achieved 99.99% Out of Sample Accura
 
 model_dir = os.path.join(os.getcwd(), 'models')
 model_paths = glob.glob(os.path.join(model_dir, '*.h5'))
-model_names = [model_path.split('\\')[-1] for model_path in model_paths]
+model_names = [model_path.split('\\')[-1].split('/')[-1] for model_path in model_paths]
 
 model_name = st.sidebar.selectbox(
     label='Select Model',
@@ -80,11 +80,11 @@ model_name = st.sidebar.selectbox(
 
 threshold = st.sidebar.slider(
     label='Select Confidence Percent Threshold',
-    min_value=80.00,
-    max_value=100.00,
-    value=90.00,
-    step=0.01,
-    format='%.2f'
+    min_value=80,
+    max_value=100,
+    value=90,
+    step=1,
+    # format='%.2f'
 )
 threshold /= 100
 
@@ -126,18 +126,18 @@ if len(image_files) > 0:
     # }
     # st.write(file_details)
 
-    imgs = load_images(image_files)
+    # imgs = load_images(image_files)
 
-    with st.spinner(f'Predicting {len(imgs)} Images...'): 
+    with st.spinner(f'Predicting {len(image_files)} Images...'): 
         start = time.time()
-        pred = predict(imgs)
+        pred = predict(image_files)
 
     df_pred, unconfident_rows = load_df(pred, threshold)
 
     #------------------------------------------------------------------------------#
 
     st.write(f"---")
-    st.write(f"## {len(imgs)} Image Predictions")
+    st.write(f"## {len(image_files)} Image Predictions")
 
     st.dataframe(df_pred.style.highlight_max(color='grey', axis=1))
     st.write(f'Runtime: {round((time.time() - start)/60, 2)} mins')
