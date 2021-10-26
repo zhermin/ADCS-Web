@@ -11,6 +11,14 @@ from keras.applications import vgg16
 
 st.set_page_config(layout="wide")
 
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+"""
+# st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 #------------------------------------------------------------------------------#
 
 IMG_SIZE = 256
@@ -70,7 +78,7 @@ Latest Results: Model "vgg16_13Oct-1845.h5" achieved 99.99% Out of Sample Accura
 
 model_dir = os.path.join(os.getcwd(), 'models')
 model_paths = glob.glob(os.path.join(model_dir, '*.h5'))
-model_names = [model_path.split('\\')[-1].split('/')[-1] for model_path in model_paths]
+model_names = sorted([model_path.split('\\')[-1].split('/')[-1] for model_path in model_paths])
 
 model_name = st.sidebar.selectbox(
     label='Select Model',
