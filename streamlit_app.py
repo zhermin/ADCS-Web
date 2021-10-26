@@ -20,6 +20,13 @@ DEFECT_MAPPING = dict(enumerate(DEFECT_LIST))
 
 #------------------------------------------------------------------------------#
 
+@st.cache(allow_output_mutation=True)
+def model_load(model_name):
+    loaded_model = load_model(os.path.join(model_dir, model_name))
+    loaded_model.make_predict_function()
+    loaded_model.summary()
+    return loaded_model
+
 @st.cache
 def load_images(image_files):
     imgs = []
@@ -33,18 +40,24 @@ def load_images(image_files):
     imgs = vgg16.preprocess_input(imgs)
     return imgs
 
-@st.cache(allow_output_mutation=True)
-def model_load(model_name):
-    loaded_model = load_model(os.path.join(model_dir, model_name))
-    loaded_model.make_predict_function()
-    loaded_model.summary()
-    return loaded_model
-
 @st.cache(show_spinner=False)
 def predict(imgs):
     with tf.device('/cpu:0'):
         pred = model.predict(imgs, batch_size=BATCH_SIZE)
     return pred
+
+@st.cache
+def load_df(pred, threshold):
+    df_pred = pd.DataFrame(pred, columns=DEFECT_LIST)
+    df_pred['confidence'] = np.max(pred, axis=1)
+    df_pred['unconfident'] = np.where(df_pred['confidence'] < threshold, True, False)
+    df_pred['prediction'] = np.argmax(pred, axis=1)
+    df_pred['prediction'] = df_pred['prediction'].map(DEFECT_MAPPING.get)
+
+    unconfident_rows = df_pred.loc[df_pred['unconfident'] == True]
+    unconfident_rows = unconfident_rows.drop('unconfident', axis=1)
+
+    return df_pred, unconfident_rows
 
 #------------------------------------------------------------------------------#
 
@@ -119,24 +132,18 @@ if len(image_files) > 0:
         start = time.time()
         pred = predict(imgs)
 
-    df_pred = pd.DataFrame(pred, columns=DEFECT_LIST)
-    df_pred['confidence'] = np.max(pred, axis=1)
-    df_pred['unconfident'] = np.where(df_pred['confidence'] < threshold, True, False)
-    df_pred['prediction'] = np.argmax(pred, axis=1)
-    df_pred['prediction'] = df_pred['prediction'].map(DEFECT_MAPPING.get)
+    df_pred, unconfident_rows = load_df(pred, threshold)
 
     #------------------------------------------------------------------------------#
 
     st.write(f"---")
     st.write(f"## {len(imgs)} Image Predictions")
 
-    st.write(df_pred.style.highlight_max(color='grey', axis=1))
+    st.dataframe(df_pred.style.highlight_max(color='grey', axis=1))
     st.write(f'Runtime: {round((time.time() - start)/60, 2)} mins')
 
     #------------------------------------------------------------------------------#
 
-    unconfident_rows = df_pred.loc[df_pred['unconfident'] == True]
-    unconfident_rows = unconfident_rows.drop('unconfident', axis=1)
     unconfident_idx = unconfident_rows.index
 
     num_imgs = len(unconfident_idx)
