@@ -1,2 +1,0 @@
-name,datetime,pretrained_model,val_loss,train_acc,val_acc,test_acc,none_acc,new_acc,new_cp_acc,n_sampling,img_size,batch_size,epochs,dense_layers,dense_layer_size,dropout
-vgg16_13Oct-1845,13Oct-1845,vgg16,2.779491296678316e-06,0.9770833333333333,1.0,0.625,1.0,0.9988344988344988,0.75,10,256,16,6,1,32,0.2
