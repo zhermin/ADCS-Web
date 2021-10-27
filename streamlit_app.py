@@ -62,10 +62,31 @@ def load_df(pred, threshold):
     df_pred['prediction'] = np.argmax(pred, axis=1)
     df_pred['prediction'] = df_pred['prediction'].map(DEFECT_MAPPING.get)
 
-    unconfident_rows = df_pred.loc[df_pred['unconfident'] == True]
-    unconfident_rows = unconfident_rows.drop('unconfident', axis=1)
+    df_chipping = df_pred.loc[df_pred['prediction'] == 'chipping']
 
-    return df_pred, unconfident_rows
+    df_unconfident = df_pred.loc[df_pred['unconfident'] == True]
+    df_unconfident = df_unconfident.drop('unconfident', axis=1)
+
+    return df_pred, df_chipping, df_unconfident
+
+def highlight_pred(image_files, df, max_cols):
+    idx = df.index
+
+    num_imgs = len(idx)
+    num_rows = num_imgs//max_cols if num_imgs%max_cols==0 else num_imgs//max_cols+1
+
+    for row in range(num_rows):
+        remaining_imgs = num_imgs-max_cols*row
+        num_cols = max_cols if remaining_imgs >= max_cols else remaining_imgs
+
+        st_row = st.columns(max_cols)
+        for col in range(num_cols):
+            image_file = image_files[idx[row*max_cols+col]]
+            st_row[col].image(image_file)
+
+            selected_row = df.iloc[row*max_cols+col]
+            st_row[col].write(f'#### [{idx[row*max_cols+col]}] {image_file.name}')
+            st_row[col].write(f'###### {selected_row["prediction"]} ({selected_row["confidence"]:.2%})')
 
 #------------------------------------------------------------------------------#
 
@@ -86,12 +107,12 @@ model_name = st.sidebar.selectbox(
     index=len(model_names)-1,
 )
 
-threshold = st.sidebar.slider(
-    label='Select Confidence Percent Threshold',
-    min_value=80,
-    max_value=100,
-    value=90,
-    step=1,
+threshold = st.sidebar.number_input(
+    label='Select Confidence % Threshold',
+    min_value=80.00,
+    max_value=100.00,
+    value=90.00,
+    step=0.01,
     # format='%.2f'
 )
 threshold /= 100
@@ -115,14 +136,14 @@ if model == None:
 #------------------------------------------------------------------------------#
 
 with st.form("image-uploader", clear_on_submit=True):
-    image_files = st.file_uploader("IMAGE UPLOADER", type=['png','jpeg','jpg'], accept_multiple_files=True)
+    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT", type=['png','jpeg','jpg'], accept_multiple_files=True)
     submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
 
     if submitted:
         if len(image_files) > 0:
-            st.success(f"{len(image_files)} FILE(S) UPLOADED!")
+            st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
         else:
-            st.info("FILES CLEARED")
+            st.info("IMAGES CLEARED")
 
 if len(image_files) > 0:
 
@@ -140,7 +161,7 @@ if len(image_files) > 0:
         start = time.time()
         pred = predict(image_files)
 
-    df_pred, unconfident_rows = load_df(pred, threshold)
+    df_pred, df_chipping, df_unconfident = load_df(pred, threshold)
 
     #------------------------------------------------------------------------------#
 
@@ -152,23 +173,14 @@ if len(image_files) > 0:
 
     #------------------------------------------------------------------------------#
 
-    unconfident_idx = unconfident_rows.index
-
-    num_imgs = len(unconfident_idx)
-    num_rows = num_imgs//max_cols if num_imgs%max_cols==0 else num_imgs//max_cols+1
-
-    st.write(f"---\n## {num_imgs} Unconfident Predictions (< {threshold:.2%} Confidence)")
-    st.write(unconfident_rows)
+    st.write(f"---\n## {len(df_chipping)} Chipping Predictions")
+    st.dataframe(df_chipping)
     st.write("")
+    highlight_pred(image_files, df_chipping, max_cols)
 
-    for row in range(num_rows):
-        remaining_imgs = num_imgs-max_cols*row
-        num_cols = max_cols if remaining_imgs >= max_cols else remaining_imgs
-        st_row = st.columns(max_cols)
-        for col in range(num_cols):
-            image_file = image_files[unconfident_idx[row*max_cols+col]]
-            st_row[col].image(image_file)
+    #------------------------------------------------------------------------------#
 
-            selected_row = unconfident_rows.iloc[row*max_cols+col]
-            st_row[col].write(f'#### [{unconfident_idx[row*max_cols+col]}] {image_file.name}')
-            st_row[col].write(f'###### {selected_row["prediction"]} ({selected_row["confidence"]:.2%})')
+    st.write(f"---\n## {len(df_unconfident)} Unconfident Predictions (< {threshold:.2%} Confidence)")
+    st.dataframe(df_unconfident)
+    st.write("")
+    highlight_pred(image_files, df_unconfident, max_cols)
