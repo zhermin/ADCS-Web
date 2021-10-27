@@ -9,7 +9,7 @@ from keras.applications import vgg16
 
 st.set_page_config(
     page_title="Wafer Edge ADC",
-    page_icon="🤖",
+    page_icon="wafer.png",
     layout="wide",
     menu_items={
         'Get Help': None,
@@ -140,10 +140,10 @@ model = model_load(model_name)
 if model == None:
     st.write("Model not loaded yet")
 
-#--------------------------------- Uploader Form ------------------------------#
+#-------------------------------- Image Uploader ------------------------------#
 
 with st.form("image-uploader", clear_on_submit=True):
-    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT", type=['png','jpeg','jpg'], accept_multiple_files=True)
+    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT (MAX 1000)", type=['png','jpeg','jpg'], accept_multiple_files=True)
     submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
 
     if submitted:
