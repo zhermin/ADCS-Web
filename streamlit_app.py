@@ -92,8 +92,11 @@ def highlight_pred(image_files, df, max_cols):
             image_file = image_files[idx[row*max_cols+col]]
             selected_row = df.iloc[row*max_cols+col]
 
-            st_row[col].image(image_file)
-            st_row[col].write(f'<p style="text-align: center;">[{idx[row*max_cols+col]}] {image_file.name}</p>', unsafe_allow_html=True)
+            st_row[col].image(
+                image_file, 
+                caption=f'[{idx[row*max_cols+col]}] {image_file.name if toggle_names else ""}'
+            )
+            # st_row[col].write(f'<p style="text-align: center;">[{idx[row*max_cols+col]}] {image_file.name if toggle_names else ""}</p>', unsafe_allow_html=True)
             st_row[col].write(f'<p style="text-align: center;">{selected_row["prediction"]} ({selected_row["confidence"]:.2%})</p>', unsafe_allow_html=True)
 
 #------------------------------- Sidebar & Headers ----------------------------#
@@ -130,6 +133,11 @@ max_cols = st.sidebar.slider(
     min_value=1,
     max_value=20,
     value=10,
+)
+
+toggle_names = st.sidebar.checkbox(
+    label='Show Image Names',
+    value=False,
 )
 
 st.write(f"## Model Selected\n `>> {model_name}`")
