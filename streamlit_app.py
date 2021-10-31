@@ -4,8 +4,10 @@ import pandas as pd
 import os, glob, time
 from PIL import Image
 
+import tensorflow as tf
+
 from keras.models import load_model
-from keras.applications import vgg16
+import keras.applications
 
 st.set_page_config(
     page_title="Wafer Edge ADC",
@@ -29,7 +31,7 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 #----------------------------------- Constants --------------------------------#
 
-IMG_SIZE = 256
+IMG_SIZE = 224
 BATCH_SIZE = 1
 DEFECT_LIST = ['none', 'chipping']
 DEFECT_MAPPING = dict(enumerate(DEFECT_LIST))
@@ -52,12 +54,13 @@ def load_images(image_files):
         imgs.append(img)
 
     imgs = np.asarray(imgs)
-    imgs = vgg16.preprocess_input(imgs)
+    imgs = PREPROCESSING_FUNCTION(imgs)
     return imgs
 
 @st.cache(show_spinner=False)
 def predict(image_files):
-    pred = model.predict(load_images(image_files), batch_size=BATCH_SIZE)
+    with tf.device('/cpu:0'):
+        pred = model.predict(load_images(image_files), batch_size=BATCH_SIZE)
     return pred
 
 @st.cache
@@ -77,7 +80,7 @@ def load_df(pred, threshold):
 
     return df_pred, df_none, df_chipping, df_unconfident
 
-def highlight_pred(image_files, df, max_cols):
+def display_images(image_files, df, max_cols):
     idx = df.index
 
     num_imgs = len(idx)
@@ -96,14 +99,14 @@ def highlight_pred(image_files, df, max_cols):
                 image_file, 
                 caption=f'[{idx[row*max_cols+col]}] {image_file.name if toggle_names else ""}'
             )
-            # st_row[col].write(f'<p style="text-align: center;">[{idx[row*max_cols+col]}] {image_file.name if toggle_names else ""}</p>', unsafe_allow_html=True)
             st_row[col].write(f'<p style="text-align: center;">{selected_row["prediction"]} ({selected_row["confidence"]:.2%})</p>', unsafe_allow_html=True)
 
 #------------------------------- Sidebar & Headers ----------------------------#
 
 st.write("""
 # CNN for Wafer Edge ADC
-Latest Results: Model "vgg16_13Oct-1845.h5" achieved 99.99% Out of Sample Accuracy (4571/4577)
+* Previous Results: Model "vgg16_13Oct-1845.h5" achieved 99.99% Out of Sample Accuracy (4571/4577)
+* Update: Model "mobilenetv2_31Oct-1335.h5" achieved 99.41% OOS Accuracy but runs >3x faster than VGG16 models
 
 ---
 """)
@@ -115,8 +118,16 @@ model_names = sorted([model_path.split('\\')[-1].split('/')[-1] for model_path i
 model_name = st.sidebar.selectbox(
     label='Select Model',
     options=model_names,
-    index=len(model_names)-1,
+    index=0,
 )
+
+PRETRAINED_NAME = model_name.split('_')[0]
+if PRETRAINED_NAME == "vgg16":
+    PREPROCESSING_FUNCTION = tf.keras.applications.vgg16.preprocess_input
+elif PRETRAINED_NAME == "resnet50v2":
+    PREPROCESSING_FUNCTION = tf.keras.applications.resnet_v2.preprocess_input
+elif PRETRAINED_NAME == "mobilenetv2":
+    PREPROCESSING_FUNCTION = tf.keras.applications.mobilenet_v2.preprocess_input
 
 threshold = st.sidebar.slider(
     label='Select Confidence % Threshold',
@@ -152,7 +163,7 @@ if model == None:
 #-------------------------------- Image Uploader ------------------------------#
 
 with st.form("image-uploader", clear_on_submit=True):
-    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT (MAX 1000)", type=['png','jpeg','jpg'], accept_multiple_files=True)
+    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT (MAX 500)", type=['png','jpeg','jpg'], accept_multiple_files=True)
     submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
 
     if submitted:
@@ -187,18 +198,18 @@ if len(image_files) > 0:
     with st.expander(f'View {len(df_none)} None Predictions'):
         st.dataframe(df_none)
         st.write("")
-        highlight_pred(image_files, df_none, max_cols)
+        display_images(image_files, df_none, max_cols)
 
     #----------------------------- Chipping Predictions ---------------------------#
 
     with st.expander(f'View {len(df_chipping)} Chipping Predictions'):
         st.dataframe(df_chipping)
         st.write("")
-        highlight_pred(image_files, df_chipping, max_cols)
+        display_images(image_files, df_chipping, max_cols)
 
     #-------------------------- Unconfident Predictions ---------------------------#
 
     with st.expander(f'View {len(df_unconfident)} Unconfident Predictions (< {threshold:.2%} Confidence)'):
         st.dataframe(df_unconfident)
         st.write("")
-        highlight_pred(image_files, df_unconfident, max_cols)
+        display_images(image_files, df_unconfident, max_cols)
