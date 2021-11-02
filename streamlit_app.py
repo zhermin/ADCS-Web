@@ -1,13 +1,11 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import os, glob, time
+import os, glob, time, re
 from PIL import Image
 
 import tensorflow as tf
-
 from keras.models import load_model
-import keras.applications
 
 st.set_page_config(
     page_title="Wafer Edge ADC",
@@ -16,7 +14,7 @@ st.set_page_config(
     menu_items={
         'Get Help': None,
         'Report a bug': None,
-        'About': "### This is an MVP of an ML Model Deployment UI\nDisclaimer: App is not optimized for performance nor integrated with any internal company infrastructure"
+        'About': None,
     }
 )
 
@@ -63,14 +61,36 @@ def predict(image_files):
         pred = model.predict(load_images(image_files), batch_size=BATCH_SIZE)
     return pred
 
+def standardise_filename(string):
+    if '-' not in string:
+        try:
+            where = [m.start() for m in re.finditer('_', string)][-5]
+            before = string[:where]
+            after = string[where:]
+            after = after.replace('_', '-', 1)
+            string = before + after
+        except:
+            pass
+    return string
+
 @st.cache
 def load_df(pred, threshold):
     df_pred = pd.DataFrame(pred, columns=DEFECT_LIST)
+    df_pred.insert(0, 'filename', [image_file.name for image_file in image_files])
+
+    try:
+        df_pred['filename'] = df_pred['filename'].apply(standardise_filename)
+        df_pred[['lot ID', 'wafer ID']] = df_pred['filename'].str.split('-', expand=True)
+        df_pred['lot ID'] = df_pred['lot ID'].str.split('_').str[-1]
+        df_pred['wafer ID'] = df_pred['wafer ID'].str.split('_').str[0]
+        df_pred = df_pred[['filename', 'lot ID', 'wafer ID', 'none', 'chipping']]
+    except: # skip creating lot ID and wafer ID columns if the filenames are invalid
+        pass
+
     df_pred['confidence'] = np.max(pred, axis=1)
     df_pred['unconfident'] = np.where(df_pred['confidence'] < threshold, True, False)
     df_pred['prediction'] = np.argmax(pred, axis=1)
     df_pred['prediction'] = df_pred['prediction'].map(DEFECT_MAPPING.get)
-    df_pred.insert(0, 'name', [image_file.name for image_file in image_files])
 
     df_none = df_pred.loc[df_pred['prediction'] == 'none']
     df_chipping = df_pred.loc[df_pred['prediction'] == 'chipping']
@@ -97,19 +117,41 @@ def display_images(image_files, df, max_cols):
 
             st_row[col].image(
                 image_file, 
-                caption=f'[{idx[row*max_cols+col]}] {image_file.name if toggle_names else ""}'
+                caption=f'[{idx[row*max_cols+col]}] {selected_row["prediction"]} ({selected_row["confidence"]:.2%}) {image_file.name if toggle_names else ""}'
             )
-            st_row[col].write(f'<p style="text-align: center;">{selected_row["prediction"]} ({selected_row["confidence"]:.2%})</p>', unsafe_allow_html=True)
 
-#------------------------------- Sidebar & Headers ----------------------------#
+#--------------------------------- Introduction -------------------------------#
 
 st.write("""
 # CNN for Wafer Edge ADC
-* Previous Results: Model "vgg16_13Oct-1845.h5" achieved 99.99% Out of Sample Accuracy (4571/4577)
-* Update: Model "mobilenetv2_31Oct-1335.h5" achieved 99.41% OOS Accuracy but runs >3x faster than VGG16 models
+#### // An ML Model Deployment UI MVP
+By: `Tam Zher Min`  
+Email: `tamzhermin@gmail.com`
 
----
-""")
+*Disclaimer: App is not optimized for performance nor integrated with any internal company infrastructure*  
+"""
+)
+
+with st.expander(f'Read App Details'):
+    st.write("""
+    ## Latest Model Updates
+    * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
+    * Update: Model `mobilenetv2_31Oct-1335.h5` achieved 99.41% OOS Accuracy but runs >3x faster than VGG16 models
+
+    ## Features
+    *Note: If the website crashes (due to out of memory issues), do contact me to reboot the app*
+
+    * Upload up to 500 (recommended) images at a time for prediction
+    * Settings at the Left Sidebar
+        * Select a trained model - they vary in accuracy and speed depending on the backbone (eg. VGG16, MobileNetV2, etc.)
+        * Select the percent threshold that predictions must meet to be considered a 'confident' prediction
+        * Select the number of images per row and per page and toggle image names for best viewing experience
+    * Sort by a particular column by clicking on the column name in a table
+    * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
+    """)
+st.write("---")
+
+#------------------------------------ Sidebar ---------------------------------#
 
 model_dir = os.path.join(os.getcwd(), 'models')
 model_paths = glob.glob(os.path.join(model_dir, '*.h5'))
@@ -136,14 +178,21 @@ threshold = st.sidebar.slider(
     value=95,
     step=1,
     # format='%.2f'
-)
-threshold /= 100
+) / 100
 
 max_cols = st.sidebar.slider(
     label='Select Number of Images per Row',
     min_value=1,
     max_value=20,
     value=10,
+)
+
+max_per_page = st.sidebar.slider(
+    label='Select Number of Images per Page',
+    min_value=10,
+    max_value=100,
+    value=40,
+    step=10,
 )
 
 toggle_names = st.sidebar.checkbox(
@@ -154,11 +203,23 @@ toggle_names = st.sidebar.checkbox(
 st.write(f"## Model Selected\n `>> {model_name}`")
 st.write("")
 
-model = None
 model = model_load(model_name)
 
-if model == None:
-    st.write("Model not loaded yet")
+#------------------------------- None Pagination ------------------------------#
+
+if 'none_page' not in st.session_state:
+    st.session_state['none_page'] = 0
+
+def update_none_page(new_none_page):
+    st.session_state['none_page'] = new_none_page
+
+def prev_none_page(): 
+    updated_page = st.session_state['none_page'] - 1
+    if updated_page >= 0: st.session_state['none_page'] = updated_page
+
+def next_none_page(): 
+    updated_page = st.session_state['none_page'] + 1
+    if updated_page < none_pages: st.session_state['none_page'] = updated_page
 
 #-------------------------------- Image Uploader ------------------------------#
 
@@ -168,6 +229,7 @@ with st.form("image-uploader", clear_on_submit=True):
 
     if submitted:
         if len(image_files) > 0:
+            st.session_state['none_page'] = 0
             st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
         else:
             st.info("IMAGES CLEARED")
@@ -196,14 +258,53 @@ if len(image_files) > 0:
     #------------------------------- None Predictions -----------------------------#
 
     with st.expander(f'View {len(df_none)} None Predictions'):
-        st.dataframe(df_none)
+        st.dataframe(df_none.style.apply(
+            lambda df: ['background: grey' if df['unconfident'] == True else '' for row in df],
+            axis=1
+        ))
         st.write("")
-        display_images(image_files, df_none, max_cols)
+
+        none_pages = len(df_none) // max_per_page if len(df_none) % max_per_page == 0 else len(df_none) // max_per_page + 1
+        if none_pages > 1:
+            page_row = st.columns([5,1,1,1])
+            with page_row[0]:
+                new_none_page = int(st.number_input(
+                    label=f"Page {st.session_state['none_page']+1}/{none_pages} (max {max_per_page} per page)",
+                    min_value=1,
+                    max_value=none_pages,
+                    value=int(st.session_state['none_page'])+1,
+                    step=1,
+                ))-1
+            with page_row[1]:
+                st.write("&nbsp;")
+                st.button(
+                    label="GO",
+                    on_click=update_none_page,
+                    args=(new_none_page,),
+                )
+            with page_row[2]:
+                st.write("&nbsp;")
+                st.button("Prev", on_click=prev_none_page)
+            with page_row[3]:
+                st.write("&nbsp;")
+                st.button("Next", on_click=next_none_page)
+
+            display_images(
+                image_files, 
+                df_none.iloc[ st.session_state['none_page']*max_per_page : (st.session_state['none_page']+1)*max_per_page ], 
+                max_cols
+            )
+
+        else:
+            display_images(image_files, df_none, max_cols)
 
     #----------------------------- Chipping Predictions ---------------------------#
 
     with st.expander(f'View {len(df_chipping)} Chipping Predictions'):
-        st.dataframe(df_chipping)
+        st.dataframe(df_chipping.style.apply(
+            lambda df: ['background: grey' if df['unconfident'] == True else '' for row in df],
+            axis=1
+        ))
         st.write("")
         display_images(image_files, df_chipping, max_cols)
 
