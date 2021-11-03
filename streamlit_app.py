@@ -120,6 +120,22 @@ def display_images(image_files, df, max_cols):
                 caption=f'[{idx[row*max_cols+col]}] {selected_row["prediction"]} ({selected_row["confidence"]:.2%}) {image_file.name if toggle_names else ""}'
             )
 
+#------------------------------- None Pagination ------------------------------#
+
+if 'none_page' not in st.session_state:
+    st.session_state['none_page'] = 0
+
+def update_none_page(new_none_page):
+    st.session_state['none_page'] = new_none_page
+
+def prev_none_page(): 
+    updated_page = st.session_state['none_page'] - 1
+    if updated_page >= 0: st.session_state['none_page'] = updated_page
+
+def next_none_page(): 
+    updated_page = st.session_state['none_page'] + 1
+    if updated_page < none_pages: st.session_state['none_page'] = updated_page
+
 #--------------------------------- Introduction -------------------------------#
 
 st.write("""
@@ -136,7 +152,7 @@ with st.expander(f'Read App Details'):
     st.write("""
     ## Latest Model Updates
     * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
-    * Update: Model `mobilenetv2_31Oct-1335.h5` achieved 99.41% OOS Accuracy but runs >3x faster than VGG16 models
+    * Update: Model `mobilenetv2_3Nov-1408.h5` achieved 99.57% OOS Accuracy but runs >3x faster than VGG16 models
 
     ## Features
     *Note: If the website crashes (due to out of memory issues), do contact me to reboot the app*
@@ -204,22 +220,6 @@ st.write(f"## Model Selected\n `>> {model_name}`")
 st.write("")
 
 model = model_load(model_name)
-
-#------------------------------- None Pagination ------------------------------#
-
-if 'none_page' not in st.session_state:
-    st.session_state['none_page'] = 0
-
-def update_none_page(new_none_page):
-    st.session_state['none_page'] = new_none_page
-
-def prev_none_page(): 
-    updated_page = st.session_state['none_page'] - 1
-    if updated_page >= 0: st.session_state['none_page'] = updated_page
-
-def next_none_page(): 
-    updated_page = st.session_state['none_page'] + 1
-    if updated_page < none_pages: st.session_state['none_page'] = updated_page
 
 #-------------------------------- Image Uploader ------------------------------#
 
