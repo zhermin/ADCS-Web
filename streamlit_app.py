@@ -7,6 +7,8 @@ from PIL import Image
 import tensorflow as tf
 from keras.models import load_model
 
+#---------------------------------- Page Config -------------------------------#
+
 st.set_page_config(
     page_title="Wafer Edge ADC",
     page_icon="wafer.png",
@@ -82,7 +84,7 @@ def load_df(pred, threshold):
         df_pred['filename'] = df_pred['filename'].apply(standardise_filename)
         df_pred[['lot ID', 'wafer ID']] = df_pred['filename'].str.split('-', expand=True)
         df_pred['lot ID'] = df_pred['lot ID'].str.split('_').str[-1]
-        df_pred['wafer ID'] = df_pred['wafer ID'].str.split('_').str[0]
+        df_pred['wafer ID'] = '#' + df_pred['wafer ID'].str.split('_').str[0]
         df_pred = df_pred[['filename', 'lot ID', 'wafer ID', 'none', 'chipping']]
     except: # skip creating lot ID and wafer ID columns if the filenames are invalid
         pass
@@ -98,13 +100,21 @@ def load_df(pred, threshold):
     df_unconfident = df_pred.loc[df_pred['unconfident'] == True]
     df_unconfident = df_unconfident.drop('unconfident', axis=1)
 
-    return df_pred, df_none, df_chipping, df_unconfident
+    df_summary = df_chipping.groupby(['lot ID', 'wafer ID'])['filename'].nunique()
+    df_summary = df_summary.reset_index()
+    df_summary = df_summary.rename(columns={'filename':'no. chipping images'})
+
+    return df_pred, df_none, df_chipping, df_unconfident, df_summary
+
+@st.cache
+def df_to_csv(df):
+    return df.to_csv(index=False, encoding='utf-8')
 
 def display_images(image_files, df, max_cols):
     idx = df.index
 
     num_imgs = len(idx)
-    num_rows = num_imgs//max_cols if num_imgs%max_cols==0 else num_imgs//max_cols+1
+    num_rows = num_imgs // max_cols if num_imgs % max_cols == 0 else num_imgs // max_cols + 1
 
     for row in range(num_rows):
         remaining_imgs = num_imgs-max_cols*row
@@ -135,37 +145,6 @@ def prev_none_page():
 def next_none_page(): 
     updated_page = st.session_state['none_page'] + 1
     if updated_page < none_pages: st.session_state['none_page'] = updated_page
-
-#--------------------------------- Introduction -------------------------------#
-
-st.write("""
-# CNN for Wafer Edge ADC
-#### // An ML Model Deployment UI MVP
-By: `Tam Zher Min`  
-Email: `tamzhermin@gmail.com`
-
-*Disclaimer: App is not optimized for performance nor integrated with any internal company infrastructure*  
-"""
-)
-
-with st.expander(f'Read App Details'):
-    st.write("""
-    ## Latest Model Updates
-    * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
-    * Update: Model `mobilenetv2_3Nov-1408.h5` achieved 99.57% OOS Accuracy but runs >3x faster than VGG16 models
-
-    ## Features
-    *Note: If the website crashes (due to out of memory issues), do contact me to reboot the app*
-
-    * Upload up to 500 (recommended) images at a time for prediction
-    * Settings at the Left Sidebar
-        * Select a trained model - they vary in accuracy and speed depending on the backbone (eg. VGG16, MobileNetV2, etc.)
-        * Select the percent threshold that predictions must meet to be considered a 'confident' prediction
-        * Select the number of images per row and per page and toggle image names for best viewing experience
-    * Sort by a particular column by clicking on the column name in a table
-    * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
-    """)
-st.write("---")
 
 #------------------------------------ Sidebar ---------------------------------#
 
@@ -216,6 +195,41 @@ toggle_names = st.sidebar.checkbox(
     value=False,
 )
 
+#--------------------------------- Introduction -------------------------------#
+
+st.write("""
+# CNN for Wafer Edge ADC
+#### // An ML Model Deployment UI MVP
+By: `Tam Zher Min`  
+Email: `tamzhermin@gmail.com`
+
+*Disclaimer: App is not optimized for performance nor integrated with any internal company infrastructure*  
+"""
+)
+
+with st.expander(f'Read App Details'):
+    st.write("""
+    ## Latest Model Updates
+    * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
+    * Update: Model `mobilenetv2_3Nov-1408.h5` achieved 99.57% OOS Accuracy but runs >3x faster than VGG16 models
+
+    ## Features
+    *Note: If the website crashes (due to out of memory issues), do contact me to reboot the app*
+
+    * Upload up to 500 (recommended) images at a time for prediction
+    * Settings at the Left Sidebar
+        * Select a trained model - they vary in accuracy and speed depending on the backbone (eg. VGG16, MobileNetV2, etc.)
+        * Select the percent threshold that predictions must meet to be considered a 'confident' prediction
+        * Select the number of images per row and per page and toggle image names for best viewing experience
+    * Sort by a particular column by clicking on the column name in a table
+    * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
+    * [NEW] Added buttons above every table to download as CSV (Excel-readable file)
+    * [NEW] Added a quick summary table to highlight the lot IDs and wafer IDs with chipping images
+    """)
+st.write("---")
+
+#---------------------------------- Load Model ------------------------------==#
+
 st.write(f"## Model Selected\n `>> {model_name}`")
 st.write("")
 
@@ -224,7 +238,11 @@ model = model_load(model_name)
 #-------------------------------- Image Uploader ------------------------------#
 
 with st.form("image-uploader", clear_on_submit=True):
-    image_files = st.file_uploader("UPLOAD IMAGES TO PREDICT (MAX 500)", type=['png','jpeg','jpg'], accept_multiple_files=True)
+    image_files = st.file_uploader(
+        "UPLOAD IMAGES TO PREDICT (MAX 500)", 
+        type=['png','jpeg','jpg'], 
+        accept_multiple_files=True,
+    )
     submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
 
     if submitted:
@@ -242,14 +260,32 @@ if len(image_files) > 0:
         start = time.time()
         pred = predict(image_files)
 
-    df_pred, df_none, df_chipping, df_unconfident = load_df(pred, threshold)
+    df_pred, df_none, df_chipping, df_unconfident, df_summary = load_df(pred, threshold)
 
-    #-------------------------------- All Predictions -----------------------------#
+    #----------------------------------- Summary ---------------------------------#
 
     st.write(f"---")
     st.write(f"## {len(image_files)} Image Predictions (Runtime: {round((time.time() - start)/60, 2)} mins)")
 
+    st.write(f'#### Summary of Wafer Lots & IDs with Chipping')
+    if len(df_summary) > 0: 
+        st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(df_summary),
+            file_name=f'Summary.csv',
+            mime='text/csv',
+        )
+    st.dataframe(df_summary)
+
+    #-------------------------------- All Predictions -----------------------------#
+
     with st.expander(f'View Table of All Predictions'):
+        st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(df_pred),
+            file_name=f'All_Predictions.csv',
+            mime='text/csv',
+        )
         st.dataframe(df_pred.style.apply(
             lambda df: ['background: grey' if df['prediction'] == 'chipping' else '' for row in df], 
             axis=1
@@ -258,13 +294,21 @@ if len(image_files) > 0:
     #------------------------------- None Predictions -----------------------------#
 
     with st.expander(f'View {len(df_none)} None Predictions'):
+        if len(df_none) > 0: st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(df_none),
+            file_name=f'None_Predictions.csv',
+            mime='text/csv',
+        )
         st.dataframe(df_none.style.apply(
             lambda df: ['background: grey' if df['unconfident'] == True else '' for row in df],
             axis=1
         ))
         st.write("")
 
-        none_pages = len(df_none) // max_per_page if len(df_none) % max_per_page == 0 else len(df_none) // max_per_page + 1
+        none_pages = len(df_none) // max_per_page \
+                    if len(df_none) % max_per_page == 0 \
+                    else len(df_none) // max_per_page + 1
         if none_pages > 1:
             page_row = st.columns([5,1,1,1])
             with page_row[0]:
@@ -291,7 +335,10 @@ if len(image_files) > 0:
 
             display_images(
                 image_files, 
-                df_none.iloc[ st.session_state['none_page']*max_per_page : (st.session_state['none_page']+1)*max_per_page ], 
+                df_none.iloc[
+                    st.session_state['none_page']*max_per_page 
+                    : (st.session_state['none_page']+1)*max_per_page
+                ], 
                 max_cols
             )
 
@@ -301,6 +348,12 @@ if len(image_files) > 0:
     #----------------------------- Chipping Predictions ---------------------------#
 
     with st.expander(f'View {len(df_chipping)} Chipping Predictions'):
+        if len(df_chipping) > 0: st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(df_chipping),
+            file_name=f'Chipping_Predictions.csv',
+            mime='text/csv',
+        )
         st.dataframe(df_chipping.style.apply(
             lambda df: ['background: grey' if df['unconfident'] == True else '' for row in df],
             axis=1
@@ -311,6 +364,12 @@ if len(image_files) > 0:
     #-------------------------- Unconfident Predictions ---------------------------#
 
     with st.expander(f'View {len(df_unconfident)} Unconfident Predictions (< {threshold:.2%} Confidence)'):
+        if len(df_unconfident) > 0: st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(df_unconfident),
+            file_name=f'Unconfident_Predictions.csv',
+            mime='text/csv',
+        )
         st.dataframe(df_unconfident)
         st.write("")
         display_images(image_files, df_unconfident, max_cols)
