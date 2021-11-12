@@ -9,7 +9,7 @@
 
 This is a webapp that I wrote to showcase a simple UI for my trained machine learning models during my internship at SSMC. My project was to create an automatic defect classification (ADC) system that can differentiate between a wafer image with chipping (left, a defect) or not (right, normal wafer). 
 
-<img src="demo/FAB1_BESUK666_1_SUK666-16H2_91_1_20210728052910_000.jpg" alt="Chipping Image" title="Chipping Image" style="width: 250px;"/> <img src="demo/FAB1_BES9C998_1_S9C998-09A3_462_1_20210914085456_000.jpg" alt="Non-Chipping Image" alt="Non-Chipping Image" style="width: 250px;"/>
+<img src="demo/FAB1_BESUK666_1_SUK666-16H2_91_1_20210728052910_000.jpg" alt="Chipping Image" title="Chipping Image" style="width: 50%;"/> <img src="demo/FAB1_BES9C998_1_S9C998-09A3_462_1_20210914085456_000.jpg" alt="Non-Chipping Image" alt="Non-Chipping Image" style="width: 50%;"/>
 
 After training the models using libraries Tensorflow and Keras and using transfer learning with convolutional neural network models such as VGG16 and MobileNetV2, the models are able to achieve >99% out of sample accuracy. 
 
