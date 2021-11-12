@@ -24,7 +24,6 @@ hide_streamlit_style = """
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.viewerBadge_container__1QSob {visibility: hidden;}
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -38,11 +37,11 @@ DEFECT_MAPPING = dict(enumerate(DEFECT_LIST))
 
 #----------------------------------- Functions --------------------------------#
 
-@st.cache(allow_output_mutation=True)
+@st.cache(allow_output_mutation=True, show_spinner=False)
 def model_load(model_name):
     loaded_model = load_model(os.path.join(model_dir, model_name))
     loaded_model.make_predict_function()
-    loaded_model.summary()
+    print(model_name)
     return loaded_model
 
 def load_images(image_files):
@@ -78,7 +77,8 @@ def standardise_filename(string):
 @st.cache
 def load_df(pred, threshold):
     df_pred = pd.DataFrame(pred, columns=DEFECT_LIST)
-    df_pred.insert(0, 'filename', [image_file.name for image_file in image_files])
+    if demo_mode: df_pred.insert(0, 'filename', [image_file.split('\\')[-1] for image_file in image_files])
+    else: df_pred.insert(0, 'filename', [image_file.name for image_file in image_files])
 
     try:
         df_pred['filename'] = df_pred['filename'].apply(standardise_filename)
@@ -123,11 +123,12 @@ def display_images(image_files, df, max_cols):
         st_row = st.columns(max_cols)
         for col in range(num_cols):
             image_file = image_files[idx[row*max_cols+col]]
+            image_name = image_file.split('\\')[-1] if demo_mode else image_file.name
             selected_row = df.iloc[row*max_cols+col]
 
             st_row[col].image(
-                image_file, 
-                caption=f'[{idx[row*max_cols+col]}] {selected_row["prediction"]} ({selected_row["confidence"]:.2%}) {image_file.name if toggle_names else ""}'
+                Image.open(image_file) if demo_mode else image_file, 
+                caption=f'[{idx[row*max_cols+col]}] {selected_row["prediction"]} ({selected_row["confidence"]:.2%}) {image_name if toggle_names else ""}'
             )
 
 #------------------------------- None Pagination ------------------------------#
@@ -145,6 +146,14 @@ def prev_none_page():
 def next_none_page(): 
     updated_page = st.session_state['none_page'] + 1
     if updated_page < none_pages: st.session_state['none_page'] = updated_page
+
+#-------------------------------- Demo Mode Logic -----------------------------#
+
+if 'reset_demo' not in st.session_state:
+    st.session_state['reset_demo'] = True
+
+def update_reset_demo():
+    st.session_state['reset_demo'] = True
 
 #------------------------------------ Sidebar ---------------------------------#
 
@@ -172,7 +181,6 @@ threshold = st.sidebar.slider(
     max_value=100,
     value=95,
     step=1,
-    # format='%.2f'
 ) / 100
 
 max_cols = st.sidebar.slider(
@@ -195,6 +203,13 @@ toggle_names = st.sidebar.checkbox(
     value=False,
 )
 
+st.sidebar.write("---")
+demo_mode = st.sidebar.checkbox(
+    label='Toggle Demo Mode',
+    value=True,
+    on_change=update_reset_demo,
+)
+
 #--------------------------------- Introduction -------------------------------#
 
 st.write("""
@@ -203,11 +218,11 @@ st.write("""
 By: `Tam Zher Min`  
 Email: `tamzhermin@gmail.com`
 
-*Disclaimer: App is not optimized for performance nor integrated with any internal company infrastructure*  
+*Note: Toggle Demo Mode off to upload your own images*  
 """
 )
 
-with st.expander(f'Read App Details'):
+with st.expander(f'[NEW] Read App Details'):
     st.write("""
     ## Latest Model Updates
     * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
@@ -225,36 +240,48 @@ with st.expander(f'Read App Details'):
     * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
     * [NEW] Added buttons above every table to download as CSV (Excel-readable file)
     * [NEW] Added a quick summary table to highlight the lot IDs and wafer IDs with chipping images
+    * [NEW] Added Demo mode to upload 5 chipping and 5 non-chipping images to demo the model for external viewers
     """)
 st.write("---")
-
-#---------------------------------- Load Model ------------------------------==#
 
 st.write(f"## Model Selected\n `>> {model_name}`")
 st.write("")
 
-model = model_load(model_name)
-
 #-------------------------------- Image Uploader ------------------------------#
 
 with st.form("image-uploader", clear_on_submit=True):
-    image_files = st.file_uploader(
-        "UPLOAD IMAGES TO PREDICT (MAX 500)", 
-        type=['png','jpeg','jpg'], 
-        accept_multiple_files=True,
-    )
-    submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
+    if demo_mode: 
+        submitted_demo = st.form_submit_button("DEMO UPLOAD")
+        if submitted_demo: st.session_state['reset_demo'] = False
 
-    if submitted:
-        if len(image_files) > 0:
+        if st.session_state['reset_demo']:
+            image_files = []
+        else:
+            image_files = glob.glob(os.path.join(os.getcwd(), 'demo', '*'))
             st.session_state['none_page'] = 0
             st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
-        else:
-            st.info("IMAGES CLEARED")
+    else: 
+        image_files = st.file_uploader(
+            "UPLOAD IMAGES TO PREDICT (MAX 500)", 
+            type=['png','jpeg','jpg'], 
+            accept_multiple_files=True,
+        )
+        submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
+        if submitted:
+            if len(image_files) > 0:
+                st.session_state['none_page'] = 0
+                st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
+            else:
+                st.info("IMAGES CLEARED")
+
+#---------------------------------- Load Model --------------------------------#
+
+with st.spinner(f'Loading Model...'): 
+    model = model_load(model_name)
 
 #---------------------------------- PREDICTIONS  ------------------------------#
 
-if len(image_files) > 0:
+if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_state['reset_demo']):
 
     with st.spinner(f'Predicting {len(image_files)} Images...'): 
         start = time.time()
