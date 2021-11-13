@@ -5,6 +5,19 @@
 
 ---
 
+## Update
+
+Unfortunately, and understandably, integrating this webapp with company infrastructure is not worth it due to a number of obstacles:
+* Data privacy
+* Data pipelining from internal databases to cloud solutions
+* Results analysis integration with company's proprietary software and tooling
+* Server renting costs from Streamlit or other cloud hosting services
+* Maintenance capabilities considering model and webapp needs to be managed simultaneously
+
+Hence, this webapp will not be maintained anymore. Although I don't think literally anyone would even read this or use this webapp, I would just like to mention that I have included some comments if I ever revisit this codebase for other purposes. Also, a Demo Mode is included if God knows who ever tries to play with this webapp. Overall, it has been fun. Every feature was thought up and implemented by me because I feel like they would be interesting functionalities in such a machine learning webapp. 
+
+---
+
 ## Description
 
 This is a webapp that I wrote to showcase a simple UI for my trained machine learning models during my internship at SSMC. My project was to create an automatic defect classification (ADC) system that can differentiate between a wafer image with chipping (left, a defect) or not (right, normal wafer). 
@@ -22,6 +35,7 @@ Hence, in order for users to utilize these trained models without integration wi
 
 ## Features
 
+* Demo Mode for external viewers to upload 10 samples images and try different models and settings
 * Upload up to 500 (recommended) images at a time for prediction
 * Settings at the Left Sidebar
     * Select a trained model - they vary in accuracy and speed depending on the backbone (eg. VGG16, MobileNetV2, etc.)
@@ -31,3 +45,4 @@ Hence, in order for users to utilize these trained models without integration wi
 * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
 * Buttons above every table to download as CSV (Excel-readable file)
 * Quick summary table to highlight the lot IDs and wafer IDs with chipping images
+* Data persistence so that users can upload images in batches and still observe previous results

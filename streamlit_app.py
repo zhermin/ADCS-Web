@@ -1,3 +1,28 @@
+#------------------------------ Table of Contents -----------------------------#
+""" // 13 November 2021; 600 lines yay; by Zher Min;
+|
++-- Library Imports
++-- Page Config
++-- Constants
++-- State Variables
++-- Functions
++-- None Pagination
++-- Sidebar
++-- Introduction
++-- Image Uploader
++-- Load Model
++-- Start Predictions
++-- Data Persistence
+\-- Batch Predictions
+    |
+    +-- Summary
+    +-- All Predictions
+    +-- None Predictions
+    +-- Chipping Predictions
+    \-- Unconfident Predictions
+"""
+#------------------------------- Library Imports ------------------------------#
+
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -7,7 +32,10 @@ from PIL import Image
 import tensorflow as tf
 from keras.models import load_model
 
-#---------------------------------- Page Config -------------------------------#
+#--------------------------------- Page Config --------------------------------#
+#-- Sets config for the Streamlit app. Also use some css hacks to get rid of --#
+#-- Streamlit's hamburger menu and footer texts.                             --#
+#------------------------------------------------------------------------------#
 
 st.set_page_config(
     page_title="Wafer Edge ADC",
@@ -28,23 +56,67 @@ footer {visibility: hidden;}
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-#----------------------------------- Constants --------------------------------#
+#---------------------------------- Constants ---------------------------------#
+#-- Image size of 224 is used since that's the standard for most CNN models. --#
+#-- Also, my models were trained using that size, so this is necessary.      --#
+#-- My problem statement only has 2 classes: none or chipping.               --#
+#------------------------------------------------------------------------------#
 
 IMG_SIZE = 224
 BATCH_SIZE = 1
 DEFECT_LIST = ['none', 'chipping']
 DEFECT_MAPPING = dict(enumerate(DEFECT_LIST))
 
-#----------------------------------- Functions --------------------------------#
+#------------------------------- State Variables ------------------------------#
+#-- Initialise Streamlit state variables for data persistence across reruns. --#
+#------------------------------------------------------------------------------#
+
+if 'none_page' not in st.session_state: st.session_state['none_page'] = 0
+if 'reset_demo' not in st.session_state: st.session_state['reset_demo'] = True
+if 'save_batch' not in st.session_state: st.session_state['save_batch'] = True
+if 'df_pred_saved' not in st.session_state: st.session_state['df_pred_saved'] = pd.DataFrame()
+if 'df_summary_saved' not in st.session_state: st.session_state['df_summary_saved'] = pd.DataFrame()
+
+#---------------------------------- Functions ---------------------------------#
+#-- Functions are defined here. Cached functions from Streamlit help store   --#
+#-- return variables into cache. If there are no changes to the output, the  --#
+#-- functions are not rerun to speed up the loading of these outputs.        --#
+#------------------------------------------------------------------------------#
 
 @st.cache(allow_output_mutation=True, show_spinner=False)
 def model_load(model_name):
+    """Loads selected machine learning model
+    
+    Flag 'allow_out_mutation=True' tells Streamlit that the output will change
+    and that we are aware of it. This is necessary to load the Keras model. 
+
+    Args:
+        model_name (str): User selected model from app's sidebar
+
+    Returns:
+        loaded_model (Keras model): Trained machine learning model from my repo
+    """
+
     loaded_model = load_model(os.path.join(model_dir, model_name))
     loaded_model.make_predict_function()
     print(model_name)
     return loaded_model
 
 def load_images(image_files):
+    """Loads images uploaded through Streamlit's file_uploader widget
+
+    This is just an intermediate helper function to load and process images.
+    Hence, this does not need to be cached.
+
+    Args:
+        image_files (list): List of uploaded images
+
+    Returns:
+        imgs (np.array): 
+            Resized using PILLOW and preprocessed by selected model's 
+            preprocessing function and stored in a numpy array
+    """
+
     imgs = []
     for i in range(len(image_files)):
         img = Image.open(image_files[i])
@@ -58,11 +130,37 @@ def load_images(image_files):
 
 @st.cache(show_spinner=False)
 def predict(image_files):
+    """Performs model prediction on the loaded images
+
+    Once images are loaded and preprocessed by load_images(), feeds them
+    into the model for prediction with specified BATCH_SIZE, which is 1
+    in most cases, since higher batch sizes require more memory. 
+
+    Args:
+        image_files (list): List of uploaded images
+    
+    Returns:
+        pred (np.array): Prediction tensor in numpy array format
+    """
+
     with tf.device('/cpu:0'):
         pred = model.predict(load_images(image_files), batch_size=BATCH_SIZE)
     return pred
 
 def standardise_filename(string):
+    """Changes an underscore to a dash at a specific location
+
+    This is another helper function to change one specific character. 
+    This is because the filename format for the chipping images are of a 
+    specific format. This will not be relevant outside of these images. 
+    
+    Args:
+        string (str): Specific filename of the input images
+
+    Returns:
+        string (str): Same string but with an underscore changed to a dash
+    """
+
     if '-' not in string:
         try:
             where = [m.start() for m in re.finditer('_', string)][-5]
@@ -76,6 +174,27 @@ def standardise_filename(string):
 
 @st.cache
 def load_df(pred, threshold):
+    """Takes in prediction tensor and outputs a bunch of dataframes for analysis
+
+    After getting the prediction tensor from the model, we can analyse the
+    results and output a few dataframes for specific functions such as
+    viewing chipping or non-chipping images only. 
+
+    Also tries to apply standardise_filename() function to split the filename
+    and get the wafer IDs and lot IDs information. 
+
+    Args:
+        pred (np.array): Prediction tensor
+        threshold (float): 
+            User-specified confidence threshold 
+            for predictions to cross from sidebar
+
+    Returns:
+        df_xxx (pandas dataframe): 
+            Bunch of dataframes that have been drilled down
+            for different purposes
+    """
+
     df_pred = pd.DataFrame(pred, columns=DEFECT_LIST)
     if demo_mode: df_pred.insert(0, 'filename', [image_file.split('\\')[-1] for image_file in image_files])
     else: df_pred.insert(0, 'filename', [image_file.name for image_file in image_files])
@@ -108,9 +227,35 @@ def load_df(pred, threshold):
 
 @st.cache
 def df_to_csv(df):
+    """Converts dataframe to a downloadable csv
+
+    Helper function with caching to generate download buttons for the dataframes
+
+    Args:
+        df (pandas dataframe): Any dataframe
+    
+    Returns:
+        a downloadable csv format
+    """
+
     return df.to_csv(index=False, encoding='utf-8')
 
 def display_images(image_files, df, max_cols):
+    """Displays images onto the Streamlit app
+
+    This helps arrange all the images onto the app evenly with the
+    user-specified max_cols variable to control the size of each image. 
+
+    Args:
+        image_files (list): List of uploaded images
+        df (pandas dataframe): 
+            The corresponding dataframe that the images are
+            to be displayed
+        max_cols (int): 
+            User-specified integer to control number of columns
+            to display in each row. In turn affects the size of images. 
+    """
+
     idx = df.index
 
     num_imgs = len(idx)
@@ -132,9 +277,9 @@ def display_images(image_files, df, max_cols):
             )
 
 #------------------------------- None Pagination ------------------------------#
-
-if 'none_page' not in st.session_state:
-    st.session_state['none_page'] = 0
+#-- Some callback functions to enable pagination for none predictions.       --#
+#-- This is needed because none predictions are usually in the hundreds.     --#
+#------------------------------------------------------------------------------#
 
 def update_none_page(new_none_page):
     st.session_state['none_page'] = new_none_page
@@ -147,15 +292,12 @@ def next_none_page():
     updated_page = st.session_state['none_page'] + 1
     if updated_page < none_pages: st.session_state['none_page'] = updated_page
 
-#-------------------------------- Demo Mode Logic -----------------------------#
-
-if 'reset_demo' not in st.session_state:
-    st.session_state['reset_demo'] = True
-
-def update_reset_demo():
-    st.session_state['reset_demo'] = True
-
-#------------------------------------ Sidebar ---------------------------------#
+#----------------------------------- Sidebar ----------------------------------#
+#-- Packs all the user settings to the sidebar.                              --#
+#-- The model's preprocessing function is also determined here depending on  --#
+#-- which model was selected. My trained models only used either of          --#
+#-- 3 backbones, so only 3 of the functions are specified.                   --#
+#------------------------------------------------------------------------------#
 
 model_dir = os.path.join(os.getcwd(), 'models')
 model_paths = glob.glob(os.path.join(model_dir, '*.h5'))
@@ -168,12 +310,9 @@ model_name = st.sidebar.selectbox(
 )
 
 PRETRAINED_NAME = model_name.split('_')[0]
-if PRETRAINED_NAME == "vgg16":
-    PREPROCESSING_FUNCTION = tf.keras.applications.vgg16.preprocess_input
-elif PRETRAINED_NAME == "resnet50v2":
-    PREPROCESSING_FUNCTION = tf.keras.applications.resnet_v2.preprocess_input
-elif PRETRAINED_NAME == "mobilenetv2":
-    PREPROCESSING_FUNCTION = tf.keras.applications.mobilenet_v2.preprocess_input
+if PRETRAINED_NAME == "vgg16": PREPROCESSING_FUNCTION = tf.keras.applications.vgg16.preprocess_input
+elif PRETRAINED_NAME == "resnet50v2": PREPROCESSING_FUNCTION = tf.keras.applications.resnet_v2.preprocess_input
+elif PRETRAINED_NAME == "mobilenetv2": PREPROCESSING_FUNCTION = tf.keras.applications.mobilenet_v2.preprocess_input
 
 threshold = st.sidebar.slider(
     label='Select Confidence % Threshold',
@@ -203,6 +342,9 @@ toggle_names = st.sidebar.checkbox(
     value=False,
 )
 
+def update_reset_demo():
+    st.session_state['reset_demo'] = True
+
 st.sidebar.write("---")
 demo_mode = st.sidebar.checkbox(
     label='Toggle Demo Mode',
@@ -210,7 +352,7 @@ demo_mode = st.sidebar.checkbox(
     on_change=update_reset_demo,
 )
 
-#--------------------------------- Introduction -------------------------------#
+#-------------------------------- Introduction --------------------------------#
 
 st.write("""
 # CNN for Wafer Edge ADC
@@ -222,7 +364,7 @@ Email: `tamzhermin@gmail.com`
 """
 )
 
-with st.expander(f'[NEW] Read App Details'):
+with st.expander(f'Read App Details'):
     st.write("""
     ## Latest Model Updates
     * Previous Results: Model `vgg16_13Oct-1845.h5` achieved 99.99% Out of Sample Accuracy (4571/4577)
@@ -238,16 +380,26 @@ with st.expander(f'[NEW] Read App Details'):
         * Select the number of images per row and per page and toggle image names for best viewing experience
     * Sort by a particular column by clicking on the column name in a table
     * For None predictions, jump to pages if there are a lot of predictions (press Enter after typing a page number and click 'GO') or use the Prev/Next buttons to navigate
-    * [NEW] Added buttons above every table to download as CSV (Excel-readable file)
-    * [NEW] Added a quick summary table to highlight the lot IDs and wafer IDs with chipping images
-    * [NEW] Added Demo mode to upload 5 chipping and 5 non-chipping images to demo the model for external viewers
+    * Buttons above every table to download as CSV (Excel-readable file)
+    * Quick summary table to highlight the lot IDs and wafer IDs with chipping images
+    * Demo Mode to upload 5 chipping and 5 non-chipping images to demo the model for external viewers
+    * Data persistence so that users can upload images in batches and still observe previous results
     """)
 st.write("---")
 
 st.write(f"## Model Selected\n `>> {model_name}`")
 st.write("")
 
-#-------------------------------- Image Uploader ------------------------------#
+#------------------------------- Image Uploader -------------------------------#
+#-- Allows users to upload wafer scans using Streamlit's image uploader.     --#
+#-- Demo mode also included for God knows who will ever try this app. lol.   --#
+#-- Just uploads 10 images stored in my repo to simulate a user using it.    --#
+#------------------------------------------------------------------------------#
+
+def upload_success(image_files):
+    st.session_state['none_page'] = 0
+    st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
+    st.session_state['save_batch'] = True
 
 with st.form("image-uploader", clear_on_submit=True):
     if demo_mode: 
@@ -258,8 +410,7 @@ with st.form("image-uploader", clear_on_submit=True):
             image_files = []
         else:
             image_files = glob.glob(os.path.join(os.getcwd(), 'demo', '*'))
-            st.session_state['none_page'] = 0
-            st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
+            upload_success(image_files)
     else: 
         image_files = st.file_uploader(
             "UPLOAD IMAGES TO PREDICT (MAX 500)", 
@@ -269,8 +420,7 @@ with st.form("image-uploader", clear_on_submit=True):
         submitted = st.form_submit_button("UPLOAD/CLEAR BATCH")
         if submitted:
             if len(image_files) > 0:
-                st.session_state['none_page'] = 0
-                st.success(f"{len(image_files)} IMAGE(S) UPLOADED!")
+                upload_success(image_files)
             else:
                 st.info("IMAGES CLEARED")
 
@@ -279,7 +429,7 @@ with st.form("image-uploader", clear_on_submit=True):
 with st.spinner(f'Loading Model...'): 
     model = model_load(model_name)
 
-#---------------------------------- PREDICTIONS  ------------------------------#
+#------------------------------ Start Predictions -----------------------------#
 
 if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_state['reset_demo']):
 
@@ -289,22 +439,70 @@ if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_sta
 
     df_pred, df_none, df_chipping, df_unconfident, df_summary = load_df(pred, threshold)
 
-    #----------------------------------- Summary ---------------------------------#
+    if not demo_mode and st.session_state['save_batch']:
+        st.session_state['df_pred_saved'] = st.session_state['df_pred_saved'].append(df_pred, ignore_index=True)
+        st.session_state['df_summary_saved'] = st.session_state['df_summary_saved'].append(df_summary, ignore_index=True)
+        st.session_state['save_batch'] = False
+
+#------------------------------ Data Persistence ------------------------------#
+#-- Since Streamlit's free servers don't allow too many images uploaded at   --#
+#-- once, this allows users to upload images in batches yet have persistence --#
+#-- in the dataframes after each batch is uploaded.                          --#
+#------------------------------------------------------------------------------#
+
+if len(st.session_state['df_pred_saved']) > 0:
+    st.write(f"---")
+    st.write(f"## {len(st.session_state['df_pred_saved'])} Persistent Predictions")
+
+    if len(st.session_state['df_summary_saved']) > 0:
+        st.write(f'#### Total Summary of Wafer Lots & IDs with Chipping')
+        st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(st.session_state['df_summary_saved']),
+            file_name=f'Total_Summary.csv',
+            mime='text/csv',
+        )
+        st.dataframe(st.session_state['df_summary_saved'])
+    else:
+        st.write(f'#### No Chipping Images found so far')
+
+    with st.expander(f'View Total Table of All Predictions'):
+        st.download_button(
+            label='DOWNLOAD',
+            data=df_to_csv(st.session_state['df_pred_saved']),
+            file_name=f'Total_Predictions.csv',
+            mime='text/csv',
+        )
+        st.dataframe(st.session_state['df_pred_saved'].style.apply(
+            lambda df: ['background: grey' if df['prediction'] == 'chipping' else '' for row in df], 
+            axis=1
+        ))
+
+#------------------------------ Batch Predictions -----------------------------#
+#-- Only displays all these mumbo jumbo if there are actually images         --#
+#-- uploaded. Displays the drilled down dataframes for further analysis.     --#
+#------------------------------------------------------------------------------#
+
+if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_state['reset_demo']):
+
+    #----------------------------------- Summary ----------------------------------#
 
     st.write(f"---")
     st.write(f"## {len(image_files)} Image Predictions (Runtime: {round((time.time() - start)/60, 2)} mins)")
 
-    st.write(f'#### Summary of Wafer Lots & IDs with Chipping')
-    if len(df_summary) > 0: 
+    if len(df_summary) > 0:
+        st.write(f'#### Summary of Wafer Lots & IDs with Chipping')
         st.download_button(
             label='DOWNLOAD',
             data=df_to_csv(df_summary),
             file_name=f'Summary.csv',
             mime='text/csv',
         )
-    st.dataframe(df_summary)
+        st.dataframe(df_summary)
+    else:
+        st.write(f'#### No Chipping Images found in this batch')
 
-    #-------------------------------- All Predictions -----------------------------#
+    #------------------------------- All Predictions ------------------------------#
 
     with st.expander(f'View Table of All Predictions'):
         st.download_button(
@@ -318,7 +516,7 @@ if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_sta
             axis=1
         ))
 
-    #------------------------------- None Predictions -----------------------------#
+    #------------------------------ None Predictions ------------------------------#
 
     with st.expander(f'View {len(df_none)} None Predictions'):
         if len(df_none) > 0: st.download_button(
@@ -372,7 +570,7 @@ if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_sta
         else:
             display_images(image_files, df_none, max_cols)
 
-    #----------------------------- Chipping Predictions ---------------------------#
+    #---------------------------- Chipping Predictions ----------------------------#
 
     with st.expander(f'View {len(df_chipping)} Chipping Predictions'):
         if len(df_chipping) > 0: st.download_button(
@@ -388,7 +586,7 @@ if (not demo_mode and len(image_files) > 0) or (demo_mode and not st.session_sta
         st.write("")
         display_images(image_files, df_chipping, max_cols)
 
-    #-------------------------- Unconfident Predictions ---------------------------#
+    #--------------------------- Unconfident Predictions --------------------------#
 
     with st.expander(f'View {len(df_unconfident)} Unconfident Predictions (< {threshold:.2%} Confidence)'):
         if len(df_unconfident) > 0: st.download_button(
