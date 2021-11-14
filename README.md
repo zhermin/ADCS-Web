@@ -14,7 +14,9 @@ Unfortunately, and understandably, integrating this webapp with company infrastr
 * Server renting costs from Streamlit or other cloud hosting services
 * Maintenance capabilities considering model and webapp needs to be managed simultaneously
 
-Hence, this webapp will not be maintained anymore. Although I don't think literally anyone would even read this or use this webapp, I would just like to mention that I have included some comments if I ever revisit this codebase for other purposes. Also, a Demo Mode is included if God knows who ever tries to play with this webapp. Overall, it has been fun. Every feature was thought up and implemented by me because I feel like they would be interesting functionalities in such a machine learning webapp. 
+Hence, this webapp will not be maintained anymore. Although I don't think literally anyone would even read this or use this webapp, I would just like to mention that I have included some comments if I ever revisit this codebase for other purposes. 
+
+Also, a Demo Mode is included if God knows who ever tries to play with this webapp. Overall, it has been fun. Every feature was thought up and implemented by me because I feel like they would be interesting functionalities in such a machine learning webapp. 
 
 ---
 
@@ -24,7 +26,7 @@ This is a webapp that I wrote to showcase a simple UI for my trained machine lea
 
 <p float="middle">
     <img src="demo/FAB1_BESUK666_1_SUK666-16H2_91_1_20210728052910_000.jpg" alt="Chipping Image" title="Chipping Image" style="width:49%;"/>
-    <img src="demo/FAB1_BES9C998_1_S9C998-09A3_462_1_20210914085456_000.jpg" alt="Non-Chipping Image" alt="Non-Chipping Image" style="width:49%;"/>
+    <img src="demo/FAB1_BES9C998_1_S9C998-09A3_462_1_20210914085456_000.jpg" alt="Non-Chipping Image" title="Non-Chipping Image" style="width:49%;"/>
 </p>
 
 After training the models using libraries Tensorflow and Keras and using transfer learning with convolutional neural network models such as VGG16 and MobileNetV2, the models are able to achieve >99% out of sample accuracy. 
