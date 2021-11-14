@@ -16,7 +16,7 @@ Unfortunately, and understandably, integrating this webapp with company infrastr
 
 Hence, this webapp will not be maintained anymore. Although I don't think literally anyone would even read this or use this webapp, I would just like to mention that I have included some comments if I ever revisit this codebase for other purposes. 
 
-Also, a Demo Mode is included if God knows who ever tries to play with this webapp. Overall, it has been fun. Every feature was thought up and implemented by me because I feel like they would be interesting functionalities in such a machine learning webapp. 
+Also, a Demo Mode is included if God knows who ever tries to play with this webapp. But overall, it has been fun. Every feature was thought up and implemented by me because I feel like they would be interesting functionalities in such a machine learning webapp. 
 
 ---
 
