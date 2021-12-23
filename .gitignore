@@ -1,5 +1,4 @@
 /.ipynb_checkpoints
-/code
 /data
 /logs
 /models/backup
@@ -8,3 +7,4 @@
 /references
 /reports
 /results
+/src
