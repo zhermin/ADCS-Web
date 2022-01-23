@@ -409,7 +409,7 @@ with st.form("image-uploader", clear_on_submit=True):
         if st.session_state['reset_demo']:
             image_files = []
         else:
-            image_files = glob.glob(os.path.join(os.getcwd(), 'demo', '*'))
+            image_files = glob.glob(os.path.join(os.getcwd(), 'demo', '*.jpg'))
             upload_success(image_files)
     else: 
         image_files = st.file_uploader(
