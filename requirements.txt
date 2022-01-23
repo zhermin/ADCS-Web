@@ -2,3 +2,4 @@ keras==2.6.0
 numpy==1.19.5
 pandas==1.2.4
 tensorflow==2.6.0
+typing-extensions>=3.10.0.0
