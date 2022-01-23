@@ -1,6 +1,6 @@
 # CNN for Wafer Edge ADC
 #### An ML Model Deployment UI MVP
-##### [View WebApp Here](https://share.streamlit.io/zhermin/ssmc "My Machine Learning WebApp")
+##### [View WebApp Here](https://share.streamlit.io/zhermin/adcs-web "My Machine Learning WebApp")
 *Note: There is a Demo Mode setup in the webapp if you are an external viewer but still want to take a look*  
 
 ---
